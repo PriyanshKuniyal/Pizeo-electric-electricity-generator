@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Piezoelectric Energy Harvesting Dashboard</title>
+    <link rel="stylesheet" href="styles.css?v=3">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-streaming"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1 class="title">⚡ Piezoelectric Energy Harvesting Dashboard</h1>
+            <div class="header-actions">
+                <button id="toggleControls" class="btn btn-secondary btn-small">⚙️ Settings</button>
+                <div class="status-indicator">
+                    <div class="status-dot connected" id="connectionStatus"></div>
+                    <span id="connectionText">Connected</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Connection Controls (Hidden by default) -->
+        <section class="controls-section" id="controlsSection" style="display: none;">
+            <div class="controls-header">
+                <h3>Connection Settings</h3>
+                <button id="closeControls" class="btn-icon">✕</button>
+            </div>
+            <div class="controls-grid">
+                <div class="control-group">
+                    <label for="portSelect">Serial Port:</label>
+                    <select id="portSelect">
+                        <option value="">Select Port...</option>
+                    </select>
+                    <button id="refreshPorts" class="btn btn-secondary btn-small">🔄</button>
+                </div>
+                
+                <div class="control-group">
+                    <label for="baudrate">Baud Rate:</label>
+                    <select id="baudrate">
+                        <option value="9600" selected>9600</option>
+                        <option value="115200">115200</option>
+                        <option value="57600">57600</option>
+                        <option value="38400">38400</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <button id="connectBtn" class="btn btn-primary">Connect</button>
+                    <button id="disconnectBtn" class="btn btn-danger" disabled>Disconnect</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Data Cards -->
+        <section class="metrics-section">
+            <!-- Total Energy Banner -->
+            <div class="total-energy-banner">
+                <div class="total-energy-content">
+                    <div class="total-energy-icon">📈</div>
+                    <div class="total-energy-text">
+                        <h3>Total Energy Generated</h3>
+                        <div>
+                            <span class="total-energy-value" id="totalEnergyValue">0.00</span>
+                            <span class="total-energy-unit">mJ</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="total-energy-status">
+                    <div class="status-dot-small"></div>
+                    <span id="totalEnergyStatus">Accumulating</span>
+                </div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric-card voltage-card">
+                    <div class="metric-header">
+                        <div class="metric-icon">⚡</div>
+                        <div class="live-badge">LIVE</div>
+                    </div>
+                    <div class="metric-content">
+                        <h3>Voltage</h3>
+                        <div>
+                            <span class="metric-value" id="voltageValue">0.00</span>
+                            <span class="metric-unit">V</span>
+                        </div>
+                    </div>
+                    <div class="metric-sparkline">
+                        <canvas id="voltageSparkline"></canvas>
+                    </div>
+                </div>
+                
+                <div class="metric-card energy-card">
+                    <div class="metric-header">
+                        <div class="metric-icon">🔋</div>
+                        <div class="live-badge">LIVE</div>
+                    </div>
+                    <div class="metric-content">
+                        <h3>Energy</h3>
+                        <div>
+                            <span class="metric-value" id="energyValue">0.00</span>
+                            <span class="metric-unit">mJ</span>
+                        </div>
+                    </div>
+                    <div class="metric-sparkline">
+                        <canvas id="energySparkline"></canvas>
+                    </div>
+                </div>
+                
+                <div class="metric-card steps-card">
+                    <div class="metric-header">
+                        <div class="metric-icon">👟</div>
+                        <div class="live-badge">LIVE</div>
+                    </div>
+                    <div class="metric-content">
+                        <h3>No. of Presses</h3>
+                        <div>
+                            <span class="metric-value" id="stepsValue">0</span>
+                            <span class="metric-unit">count</span>
+                        </div>
+                    </div>
+                    <div class="metric-sparkline">
+                        <canvas id="stepsSparkline"></canvas>
+                    </div>
+                </div>
+                
+                <div class="metric-card power-card">
+                    <div class="metric-header">
+                        <div class="metric-icon">🔥</div>
+                        <div class="live-badge">LIVE</div>
+                    </div>
+                    <div class="metric-content">
+                        <h3>Power</h3>
+                        <div>
+                            <span class="metric-value" id="powerValue">0.00</span>
+                            <span class="metric-unit">mW</span>
+                        </div>
+                    </div>
+                    <div class="metric-sparkline">
+                        <canvas id="powerSparkline"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LED Status (Hidden by default) -->
+            <div class="led-section" style="display: none;">
+                <div class="led-container">
+                    <div class="led-indicator" id="ledIndicator"></div>
+                    <span class="led-label">LED Status: <span id="ledStatus">OFF</span></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Graph Section (Hidden by default) -->
+        <section class="graph-section" style="display: none;">
+            <div class="graph-header">
+                <h2>Real-time Voltage Graph</h2>
+                <div class="graph-controls">
+                    <button id="clearGraph" class="btn btn-secondary">Clear Graph</button>
+                    <button id="toggleLogging" class="btn btn-success">Start Logging</button>
+                </div>
+            </div>
+            <div class="graph-container">
+                <canvas id="voltageChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Data Logging Status (Hidden by default) -->
+        <section class="logging-section" style="display: none;">
+            <div class="logging-status">
+                <div class="logging-indicator" id="loggingIndicator"></div>
+                <span id="loggingStatus">Logging: Stopped</span>
+                <span id="loggingFile"></span>
+            </div>
+        </section>
+
+        <!-- Footer (Hidden by default) -->
+        <footer class="footer" style="display: none;">
+            <p>&copy; 2025 Piezoelectric Energy Harvesting Project - Science Fair Model</p>
+            <div class="stats">
+                <span>Connected Clients: <span id="clientCount">0</span></span>
+                <span>Last Update: <span id="lastUpdate">Never</span></span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="app.js?v=6"></script>
+</body>
+</html>
