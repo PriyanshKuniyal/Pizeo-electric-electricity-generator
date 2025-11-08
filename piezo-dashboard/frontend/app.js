@@ -12,9 +12,11 @@ class PiezoelectricDashboard {
             steps: [],
             power: []
         };
-        this.maxDataPoints = 120; // 60 seconds at 2Hz
-        this.maxSparklinePoints = 30; // 30 points for sparklines
+        this.maxDataPoints = 600; // 60 seconds at 10Hz for smooth graphs
+        this.maxSparklinePoints = 50; // More points for smoother sparklines
         this.totalEnergy = 0;
+        this.lastUpdate = Date.now();
+        this.updateQueue = []; // Queue for smooth animations
         
         this.init();
     }
@@ -49,19 +51,18 @@ class PiezoelectricDashboard {
                     data: [],
                     borderColor: '#d69e2e',
                     backgroundColor: 'rgba(214, 158, 46, 0.1)',
-                    borderWidth: 3,
+                    borderWidth: 2,
                     fill: true,
-                    tension: 0.4,
+                    tension: 0.3,  // Smoother curves
                     pointRadius: 0,
-                    pointHoverRadius: 4
+                    pointHoverRadius: 4,
+                    cubicInterpolationMode: 'monotone'  // Smooth interpolation
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                animation: {
-                    duration: 0
-                },
+                animation: false,  // Disable for instant updates
                 interaction: {
                     intersect: false,
                     mode: 'index'
@@ -80,20 +81,25 @@ class PiezoelectricDashboard {
                 scales: {
                     x: {
                         grid: {
-                            color: '#e2e8f0'
+                            color: '#e2e8f0',
+                            drawBorder: false
                         },
                         ticks: {
                             color: '#718096',
-                            maxTicksLimit: 10
+                            maxTicksLimit: 10,
+                            autoSkip: true,
+                            maxRotation: 0
                         }
                     },
                     y: {
                         beginAtZero: true,
                         grid: {
-                            color: '#e2e8f0'
+                            color: '#e2e8f0',
+                            drawBorder: false
                         },
                         ticks: {
-                            color: '#718096'
+                            color: '#718096',
+                            precision: 2
                         },
                         title: {
                             display: true,
@@ -112,14 +118,17 @@ class PiezoelectricDashboard {
 
     setupSparklines() {
         const sparklineConfig = {
-            voltage: { canvas: 'voltageSparkline', color: '#d69e2e', bgColor: 'rgba(214, 158, 46, 0.1)' },
-            energy: { canvas: 'energySparkline', color: '#2b6cb0', bgColor: 'rgba(43, 108, 176, 0.1)' },
-            steps: { canvas: 'stepsSparkline', color: '#319795', bgColor: 'rgba(49, 151, 149, 0.1)' },
-            power: { canvas: 'powerSparkline', color: '#dd6b20', bgColor: 'rgba(221, 107, 32, 0.1)' }
+            voltage: { canvas: 'voltageSparkline', color: '#d69e2e', bgColor: 'rgba(214, 158, 46, 0.15)' },
+            energy: { canvas: 'energySparkline', color: '#2b6cb0', bgColor: 'rgba(43, 108, 176, 0.15)' },
+            steps: { canvas: 'stepsSparkline', color: '#319795', bgColor: 'rgba(49, 151, 149, 0.15)' },
+            power: { canvas: 'powerSparkline', color: '#dd6b20', bgColor: 'rgba(221, 107, 32, 0.15)' }
         };
 
         for (const [key, config] of Object.entries(sparklineConfig)) {
-            const ctx = document.getElementById(config.canvas).getContext('2d');
+            const canvas = document.getElementById(config.canvas);
+            if (!canvas) continue;
+            
+            const ctx = canvas.getContext('2d');
             this.sparklines[key] = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -128,23 +137,27 @@ class PiezoelectricDashboard {
                         data: [],
                         borderColor: config.color,
                         backgroundColor: config.bgColor,
-                        borderWidth: 2,
+                        borderWidth: 1.5,
                         fill: true,
-                        tension: 0.4,
+                        tension: 0.3,  // Smooth curves
                         pointRadius: 0,
+                        cubicInterpolationMode: 'monotone'  // Smooth interpolation
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    animation: false,
+                    animation: false,  // Instant updates
                     plugins: {
                         legend: { display: false },
                         tooltip: { enabled: false }
                     },
                     scales: {
                         x: { display: false },
-                        y: { display: false }
+                        y: { 
+                            display: false,
+                            beginAtZero: true
+                        }
                     }
                 }
             });
@@ -314,13 +327,13 @@ class PiezoelectricDashboard {
         this.totalEnergy += energyMJ;
         this.updateMetricValue('totalEnergyValue', this.totalEnergy, '0.00');
         
-        // Update metric values with animation
-        this.updateMetricValue('voltageValue', data.voltage, '0.00');
-        this.updateMetricValue('energyValue', energyMJ, '0.00');
+        // Update metric values instantly - no animation delay
+        this.updateMetricValue('voltageValue', data.voltage, '0.000');  // 3 decimals for precision
+        this.updateMetricValue('energyValue', energyMJ, '0.000');
         this.updateMetricValue('stepsValue', data.steps, '0');
-        this.updateMetricValue('powerValue', powerMW, '0.00');
+        this.updateMetricValue('powerValue', powerMW, '0.000');
         
-        // Update sparklines
+        // Update sparklines instantly
         this.updateSparkline('voltage', data.voltage);
         this.updateSparkline('energy', energyMJ);
         this.updateSparkline('steps', data.steps);
@@ -344,6 +357,8 @@ class PiezoelectricDashboard {
     }
 
     updateSparkline(type, value) {
+        if (!this.sparklines[type]) return;
+        
         // Add new data point
         this.sparklineData[type].push(value);
         
@@ -352,10 +367,12 @@ class PiezoelectricDashboard {
             this.sparklineData[type].shift();
         }
         
-        // Update the sparkline chart
+        // Update the sparkline chart instantly
         const chart = this.sparklines[type];
         chart.data.labels = Array(this.sparklineData[type].length).fill('');
-        chart.data.datasets[0].data = this.sparklineData[type];
+        chart.data.datasets[0].data = [...this.sparklineData[type]];  // Clone array for reactivity
+        
+        // Use 'none' mode for instant, no-animation update
         chart.update('none');
     }
 
@@ -385,29 +402,34 @@ class PiezoelectricDashboard {
         
         element.textContent = formattedValue;
         
-        // Remove animation classes after animation completes
+        // Remove animation classes quickly (reduced from 500ms to 150ms)
         setTimeout(() => {
             element.classList.remove('updating');
             if (card) {
                 card.classList.remove('updating');
             }
-        }, 500);
+        }, 150);
     }
 
     updateGraph(data) {
-        const now = new Date().toLocaleTimeString();
+        const now = Date.now();
+        const timeLabel = new Date(now).toLocaleTimeString('en-US', { 
+            hour12: false, 
+            minute: '2-digit', 
+            second: '2-digit' 
+        });
         
         // Add new data point
-        this.chart.data.labels.push(now);
+        this.chart.data.labels.push(timeLabel);
         this.chart.data.datasets[0].data.push(data.voltage);
 
-        // Keep only the last maxDataPoints
+        // Keep only the last maxDataPoints for smooth scrolling
         if (this.chart.data.labels.length > this.maxDataPoints) {
             this.chart.data.labels.shift();
             this.chart.data.datasets[0].data.shift();
         }
 
-        // Update chart
+        // Instant update with no animation
         this.chart.update('none');
     }
 

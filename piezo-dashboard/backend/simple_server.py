@@ -43,50 +43,53 @@ def check_dummy_data_enabled():
     return os.path.exists('dummy_data.cfg')
 
 async def generate_dummy_data():
-    """Generate realistic dummy data continuously"""
+    """Generate realistic dummy data continuously with smooth transitions"""
     global dummy_state
     
     logger.info("🎭 Dummy data generator started - Delete dummy_data.cfg to stop")
     
     while check_dummy_data_enabled():
         try:
-            # Simulate varying voltage
-            dummy_state['voltage'] = max(0, min(5.0, 
-                2.5 + random.uniform(-0.8, 0.8) + random.gauss(0, 0.2)
-            ))
-            
-            # Simulate step detection (15% chance per update)
-            if random.random() < 0.15:
+            # Simulate voltage spikes (like piezo presses) - 20% chance
+            if random.random() < 0.20:
+                # Sharp spike to simulate press
+                dummy_state['voltage'] = random.uniform(3.5, 4.8)
                 dummy_state['steps'] += 1
+                dummy_state['led'] = 'ON'
+            else:
+                # Gradual decay back to baseline
+                dummy_state['voltage'] *= 0.85  # Fast decay
+                dummy_state['voltage'] += random.uniform(-0.1, 0.1)  # Small noise
+                dummy_state['voltage'] = max(0.1, min(5.0, dummy_state['voltage']))
+                
+                # Turn off LED after spike
+                if dummy_state['voltage'] < 1.0:
+                    dummy_state['led'] = 'OFF'
             
             # Calculate energy and power based on voltage
             energy = dummy_state['voltage'] * dummy_state['voltage'] * 0.0001
-            power = dummy_state['voltage'] * dummy_state['voltage'] * 0.001 + random.uniform(-0.002, 0.002)
-            power = max(0, power)  # No negative power
-            
-            # Toggle LED randomly (10% chance)
-            if random.random() < 0.1:
-                dummy_state['led'] = 'ON' if dummy_state['led'] == 'OFF' else 'OFF'
+            power = dummy_state['voltage'] * dummy_state['voltage'] * 0.001
+            power = max(0, power)
             
             # Create data packet
             data = {
                 'timestamp': datetime.now().isoformat(),
-                'voltage': round(dummy_state['voltage'], 2),
+                'voltage': round(dummy_state['voltage'], 3),  # 3 decimals for smooth display
                 'energy': round(energy, 6),
                 'steps': dummy_state['steps'],
                 'power': round(power, 5),
                 'led': dummy_state['led']
             }
             
-            # Broadcast to all connected clients
+            # Broadcast to all connected clients immediately
             await broadcast_to_websockets(data)
             
             # Log to CSV if logging is enabled
             if is_logging:
                 log_to_csv(data)
             
-            # Update every 0.5 seconds
-            await asyncio.sleep(0.5)
+            # Fast update rate: 100ms (10 updates per second) for smooth animation
+            await asyncio.sleep(0.1)
             
         except Exception as e:
             logger.error(f"Error in dummy data generator: {e}")
@@ -191,7 +194,7 @@ async def broadcast_to_websockets(data):
                 connected_websockets.remove(websocket)
 
 async def read_serial_data():
-    """Continuously read data from serial port"""
+    """Continuously read data from serial port with minimal latency"""
     global serial_connection
     
     buffer = ""
@@ -199,17 +202,17 @@ async def read_serial_data():
     while serial_connection and serial_connection.is_open:
         try:
             if serial_connection.in_waiting > 0:
-                chunk = serial_connection.read(serial_connection.in_waiting).decode('utf-8')
+                chunk = serial_connection.read(serial_connection.in_waiting).decode('utf-8', errors='ignore')
                 buffer += chunk
                 
-                # Look for complete data blocks (ending with dashes)
-                if '------------------------------' in buffer:
-                    parts = buffer.split('------------------------------')
+                # Look for complete data blocks (ending with dashes or newlines)
+                if '-------' in buffer or buffer.count('\n') >= 5:
+                    parts = buffer.split('-------')
                     for part in parts[:-1]:  # Process all complete parts
                         if part.strip():
                             parsed_data = parse_sensor_data(part)
                             if parsed_data:
-                                # Broadcast to all connected clients
+                                # Broadcast immediately - no buffering
                                 await broadcast_to_websockets(parsed_data)
                                 
                                 # Log to CSV if logging is enabled
@@ -219,7 +222,8 @@ async def read_serial_data():
                     # Keep the incomplete part in buffer
                     buffer = parts[-1]
             
-            await asyncio.sleep(0.01)  # Small delay to prevent busy waiting
+            # Ultra-short delay for instant response (1ms)
+            await asyncio.sleep(0.001)
             
         except Exception as e:
             logger.error(f"Error reading serial data: {e}")

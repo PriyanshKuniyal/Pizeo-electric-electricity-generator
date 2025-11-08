@@ -16,8 +16,8 @@
 // Configuration
 const int PIEZO_PIN = A0;           // Analog pin for piezo sensor
 const int LED_PIN = 13;             // LED indicator
-const int BAUD_RATE = 9600;         // Serial communication speed
-const int SAMPLE_RATE = 500;        // Send data every 500ms
+const int BAUD_RATE = 115200;       // Fast serial communication (was 9600)
+const int SAMPLE_RATE = 100;        // Send data every 100ms (10Hz) for smooth real-time
 const float V_REF = 5.0;            // Arduino reference voltage
 const int ADC_MAX = 1023;           // 10-bit ADC max value
 
@@ -34,7 +34,7 @@ bool ledState = false;
 
 // Threshold for step detection
 const float STEP_THRESHOLD = 2.0;  // Voltage threshold for detecting a press
-const int DEBOUNCE_TIME = 200;     // Minimum time between steps (ms)
+const int DEBOUNCE_TIME = 100;     // Minimum time between steps (reduced for faster response)
 
 void setup() {
   // Initialize serial communication
@@ -82,20 +82,20 @@ void loop() {
     digitalWrite(LED_PIN, HIGH);
   }
   
-  // Turn off LED after short duration
-  if (ledState && (currentTime - lastStepTime) > 100) {
+  // Turn off LED after short duration (50ms for quick response)
+  if (ledState && (currentTime - lastStepTime) > 50) {
     ledState = false;
     digitalWrite(LED_PIN, LOW);
   }
   
-  // Send data at specified sample rate
+  // Send data at specified sample rate (100ms = 10 updates per second)
   if (currentTime - lastUpdate >= SAMPLE_RATE) {
     sendDataToSerial(voltage, totalEnergy, stepCount, power, ledState);
     lastUpdate = currentTime;
   }
   
-  // Small delay to prevent overwhelming the ADC
-  delay(10);
+  // Minimal delay to prevent ADC noise (reduced from 10ms to 5ms)
+  delay(5);
 }
 
 void sendDataToSerial(float voltage, float energy, int steps, float power, bool led) {
