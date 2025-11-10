@@ -68,9 +68,48 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 def parse_sensor_data(raw_data: str) -> Optional[Dict[str, Any]]:
-    """Parse the raw sensor data string into structured data"""
+    """Parse the raw sensor data string into structured data
+    
+    Supports two formats:
+    1. Original format (separate lines):
+       Voltage: 1.5
+       Energy: 0.025
+       Steps: 150
+       Power: 2.25
+       LED: ON
+    
+    2. Pico format (single line from voltage.py):
+       V: 0.003V | P: 0.00mW | E_inst: 0.000mJ | E_total: 0.000mWh
+    """
     try:
-        lines = raw_data.strip().split('\n')
+        raw_data = raw_data.strip()
+        
+        # Try parsing Pico format first (single line with | separators)
+        if '|' in raw_data:
+            # Extract values using regex
+            voltage_match = re.search(r'V:\s*([\d.]+)V', raw_data)
+            power_match = re.search(r'P:\s*([\d.]+)mW', raw_data)
+            energy_inst_match = re.search(r'E_inst:\s*([\d.]+)mJ', raw_data)
+            energy_total_match = re.search(r'E_total:\s*([\d.]+)mWh', raw_data)
+            
+            if voltage_match and power_match:
+                voltage = float(voltage_match.group(1))
+                power_mw = float(power_match.group(1))
+                energy_total_mwh = float(energy_total_match.group(1)) if energy_total_match else 0.0
+                
+                # Convert to expected units
+                data = {
+                    'voltage': voltage,  # V
+                    'power': power_mw / 1000.0,  # Convert mW to W
+                    'energy': energy_total_mwh,  # mWh (keep as is)
+                    'steps': 0,  # Not available in Pico format
+                    'led': 'OFF',  # Not available in Pico format
+                    'timestamp': datetime.now().isoformat()
+                }
+                return data
+        
+        # Fall back to original format (separate lines)
+        lines = raw_data.split('\n')
         data = {}
         
         for line in lines:
@@ -156,25 +195,23 @@ async def read_serial_data():
     while serial_connection and serial_connection.is_open:
         try:
             if serial_connection.in_waiting > 0:
-                chunk = serial_connection.read(serial_connection.in_waiting).decode('utf-8')
+                chunk = serial_connection.read(serial_connection.in_waiting).decode('utf-8', errors='ignore')
                 buffer += chunk
                 
-                # Look for complete data blocks (ending with dashes)
-                if '------------------------------' in buffer:
-                    parts = buffer.split('------------------------------')
-                    for part in parts[:-1]:  # Process all complete parts
-                        if part.strip():
-                            parsed_data = parse_sensor_data(part)
-                            if parsed_data:
-                                # Broadcast to all connected clients
-                                await manager.broadcast(parsed_data)
-                                
-                                # Log to CSV if logging is enabled
-                                if is_logging:
-                                    log_to_csv(parsed_data)
+                # Process line by line (Pico sends one reading per line)
+                while '\n' in buffer:
+                    line, buffer = buffer.split('\n', 1)
+                    line = line.strip()
                     
-                    # Keep the incomplete part in buffer
-                    buffer = parts[-1]
+                    if line:  # Process non-empty lines
+                        parsed_data = parse_sensor_data(line)
+                        if parsed_data:
+                            # Broadcast to all connected clients
+                            await manager.broadcast(parsed_data)
+                            
+                            # Log to CSV if logging is enabled
+                            if is_logging:
+                                log_to_csv(parsed_data)
             
             await asyncio.sleep(0.01)  # Small delay to prevent busy waiting
             
@@ -185,7 +222,7 @@ async def read_serial_data():
 @app.get("/")
 async def get_dashboard():
     """Serve the main dashboard HTML"""
-    with open("frontend/index.html", "r") as f:
+    with open("frontend/index.html", "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
 @app.get("/api/ports")
