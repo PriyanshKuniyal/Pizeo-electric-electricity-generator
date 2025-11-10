@@ -30,7 +30,10 @@ class VoltageSensor:
 # Run continuously and print voltage, power, and energy when executed directly.
 if __name__ == "__main__":
     # --- CONFIGURATION ---
-    LOAD_RESISTANCE = 1000.0  # Ohms - CHANGE THIS to your actual load!
+    # IMPORTANT: Measure your TOTAL circuit resistance (R_total = R_piezo + R_load + R_series)
+    # Use multimeter or calculate: R_total = V_measured / I_measured
+    LOAD_RESISTANCE = 330.0  # Ohms - CHANGE THIS to your actual TOTAL resistance!
+    
     INTERVAL_S = 0.5  # Time interval: 0.5s = 2 readings per second (slower for Bluetooth)
     USE_BLUETOOTH = True  # Set False to disable BT
     

@@ -142,10 +142,60 @@ Pizeo-electric-electricity-generator/
 ### Firmware Settings (firmware/voltage.py)
 
 ```python
-LOAD_RESISTANCE = 1000.0  # Ohms - Change to your actual load
+# IMPORTANT: Use your TOTAL circuit resistance for accurate power calculations
+LOAD_RESISTANCE = 1000.0  # Ohms - MUST measure your actual total resistance!
 INTERVAL_S = 0.5          # Sampling interval (seconds)
 USE_BLUETOOTH = True      # Enable/disable Bluetooth
 ```
+
+### 📐 Measuring Total Circuit Resistance
+
+For accurate power (P = V²/R) and energy calculations, you need the **total resistance**:
+
+**Total Resistance = R_piezo + R_load + R_series + R_wiring**
+
+#### Method 1: Direct Multimeter Measurement (Easiest)
+1. Disconnect circuit from power
+2. Set multimeter to Ω (resistance) mode
+3. Measure across the entire circuit
+4. This gives you **R_total** directly
+5. Update `LOAD_RESISTANCE` in voltage.py
+
+#### Method 2: Calculate from V and I
+1. Connect circuit and let piezo generate voltage
+2. Measure voltage (V) using your sensor
+3. Measure current (I) using ammeter in series
+4. Calculate: **R_total = V / I**
+5. Update `LOAD_RESISTANCE` in voltage.py
+
+#### Method 3: Sum Individual Resistances
+```
+R_total = R_piezo + R_load + R_protection + R_wiring
+
+Example:
+  R_piezo = 100Ω (internal resistance)
+  R_load = 1000Ω (your load)
+  R_protection = 50Ω (series resistor)
+  R_wiring ≈ 5Ω (wire resistance)
+  ─────────────────────────
+  R_total = 1155Ω  ← Use this value!
+```
+
+**After measuring, update the firmware:**
+```bash
+# Edit voltage.py line 33
+LOAD_RESISTANCE = 1155.0  # Your measured value
+
+# Redeploy to Pico
+mpremote connect COM11 cp firmware/voltage.py :main.py
+mpremote connect COM11 reset
+```
+
+---
+
+## 🔋 Understanding Power Calculations
+
+The firmware calculates:
 
 ### Data Format
 
@@ -176,6 +226,7 @@ pip install --upgrade fastapi uvicorn pydantic pyserial websockets
 - ✅ **Solution 1**: Use USB connection instead (always works)
 - ✅ **Solution 2**: Get USB Bluetooth adapter with SPP support
 - ✅ **Solution 3**: Use different PC/laptop
+- ✅ **Mac Users**: macOS has excellent Bluetooth SPP support - HC-05 works perfectly!
 
 ### No Data Appearing
 - ✅ Verify correct COM port selected
@@ -313,6 +364,7 @@ See LICENSE file for details.
 
 **Just want to run it? Copy-paste these commands:**
 
+### For Windows:
 ```bash
 # 1. Install dependencies (first time only)
 cd piezo-dashboard
@@ -321,16 +373,37 @@ pip install -r requirements.txt
 # 2. Start dashboard server
 python backend/main.py
 
-# 3. Open browser
-# http://127.0.0.1:8000
-
+# 3. Open browser: http://127.0.0.1:8000
 # 4. In dashboard:
 #    - Click "Refresh Ports"
-#    - Select your COM port
+#    - Select your COM port (e.g., COM4, COM11)
 #    - Set baud rate (9600 for BT, 115200 for USB)
 #    - Click "Connect"
 #    - Enjoy live data! 🎉
 ```
+
+### For macOS (Mac M1/M2):
+```bash
+# 1. Install dependencies (first time only)
+cd piezo-dashboard
+pip3 install -r requirements.txt
+
+# 2. Pair HC-05 Bluetooth
+# System Preferences → Bluetooth → Add HC-05 (PIN: 1234)
+
+# 3. Start dashboard server
+python3 backend/main.py
+
+# 4. Open browser: http://127.0.0.1:8000
+# 5. In dashboard:
+#    - Click "Refresh Ports"
+#    - Select your port (e.g., /dev/tty.HC-05-DevB or /dev/tty.usbmodem*)
+#    - Set baud rate (9600 for BT, 115200 for USB)
+#    - Click "Connect"
+#    - Enjoy live data! 🎉
+```
+
+**Note:** macOS has excellent Bluetooth SPP support - HC-05 works perfectly without any issues!
 
 ---
 
