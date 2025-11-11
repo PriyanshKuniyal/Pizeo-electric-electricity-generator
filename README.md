@@ -17,26 +17,47 @@ A complete IoT system for monitoring piezoelectric energy harvesting in real-tim
 
 ## ⚡ Running the Dashboard
 
-### Step 1: Install Dependencies
+### For macOS (Automatic HC-05 Connection)
 
-Open terminal/command prompt and run:
+**Simply run:**
 
 ```bash
-cd piezo-dashboard
-pip install -r requirements.txt
+./start_dashboard_mac.sh
 ```
 
-### Step 2: Start the Dashboard Server
+The dashboard will:
+- ✅ Install dependencies automatically
+- ✅ Auto-detect and connect to HC-05 Bluetooth
+- ✅ Open at http://127.0.0.1:8000
+- ✅ Start showing data immediately!
 
-**Copy and paste this command:**
+**First time setup:**
+```bash
+chmod +x start_dashboard_mac.sh
+./start_dashboard_mac.sh
+```
 
+### For Windows
+
+**Option 1: Double-click**
+```
+start_dashboard.bat
+```
+
+**Option 2: Command line**
 ```bash
 cd piezo-dashboard && python backend/main.py
 ```
 
-Or on Windows, double-click:
-```
-start_dashboard.bat
+### Manual Installation
+
+If you prefer to install step-by-step:
+
+```bash
+cd piezo-dashboard
+pip install -r requirements.txt
+cd backend
+python main.py
 ```
 
 The dashboard will open automatically at: **http://127.0.0.1:8000**
@@ -226,7 +247,22 @@ pip install --upgrade fastapi uvicorn pydantic pyserial websockets
 - ✅ **Solution 1**: Use USB connection instead (always works)
 - ✅ **Solution 2**: Get USB Bluetooth adapter with SPP support
 - ✅ **Solution 3**: Use different PC/laptop
-- ✅ **Mac Users**: macOS has excellent Bluetooth SPP support - HC-05 works perfectly!
+- ✅ **Mac Users**: macOS has excellent Bluetooth SPP support - HC-05 works perfectly! Just run `./start_dashboard_mac.sh` and it will auto-connect!
+
+### macOS: HC-05 Not Auto-Connecting
+1. **Pair HC-05 first:**
+   - Go to System Preferences → Bluetooth
+   - Pair with "HC-05" (PIN: 1234 or 0000)
+2. **Check port name:**
+   ```bash
+   ls /dev/tty.* | grep -i serial
+   ```
+   You should see something like `/dev/tty.HC-05-SerialPort`
+3. **Run dashboard:**
+   ```bash
+   ./start_dashboard_mac.sh
+   ```
+   The dashboard will automatically detect and connect!
 
 ### No Data Appearing
 - ✅ Verify correct COM port selected

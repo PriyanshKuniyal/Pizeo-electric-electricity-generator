@@ -2,6 +2,7 @@ import asyncio
 import json
 import csv
 import os
+import sys
 import re
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -227,14 +228,33 @@ async def get_dashboard():
 
 @app.get("/api/ports")
 async def get_available_ports():
-    """Get list of available serial ports"""
+    """Get list of available serial ports with HC-05 auto-detection"""
     try:
         ports = serial.tools.list_ports.comports()
-        port_list = [{"device": port.device, "description": port.description} for port in ports]
-        return {"ports": port_list}
+        port_list = []
+        hc05_port = None
+        
+        for port in ports:
+            port_info = {"device": port.device, "description": port.description}
+            
+            # Auto-detect HC-05 on macOS (looks for /dev/tty.* or /dev/cu.* Bluetooth ports)
+            if 'tty.' in port.device.lower() or 'cu.' in port.device.lower():
+                if any(keyword in port.device.lower() for keyword in ['hc-05', 'bluetooth', 'bt', 'serial']):
+                    port_info["is_hc05"] = True
+                    hc05_port = port.device
+            
+            # Auto-detect on Windows (COM ports with Bluetooth in description)
+            if 'com' in port.device.lower():
+                if any(keyword in port.description.lower() for keyword in ['bluetooth', 'hc-05', 'bt']):
+                    port_info["is_hc05"] = True
+                    hc05_port = port.device
+            
+            port_list.append(port_info)
+        
+        return {"ports": port_list, "auto_detected_hc05": hc05_port}
     except Exception as e:
         logger.error(f"Error getting ports: {e}")
-        return {"ports": []}
+        return {"ports": [], "auto_detected_hc05": None}
 
 class SerialConnectRequest(BaseModel):
     port: str
@@ -327,6 +347,59 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
+async def auto_connect_hc05():
+    """Automatically connect to HC-05 on startup if available"""
+    global serial_connection
+    
+    try:
+        logger.info("Searching for HC-05 Bluetooth module...")
+        ports = serial.tools.list_ports.comports()
+        
+        # macOS: Look for /dev/tty.* or /dev/cu.* Bluetooth serial ports
+        # Windows: Look for COM ports with Bluetooth in description
+        for port in ports:
+            is_hc05 = False
+            
+            # macOS detection
+            if 'darwin' in os.sys.platform or 'linux' in os.sys.platform:
+                if '/dev/tty.' in port.device or '/dev/cu.' in port.device:
+                    # Check for HC-05, Bluetooth keywords
+                    if any(kw in port.device.lower() for kw in ['hc-05', 'hc05', 'bluetooth', 'bt']):
+                        is_hc05 = True
+                    # Also try any tty/cu port that looks like serial Bluetooth
+                    elif 'serial' in port.device.lower():
+                        is_hc05 = True
+            
+            # Windows detection
+            elif 'win' in os.sys.platform:
+                if any(kw in port.description.lower() for kw in ['bluetooth', 'hc-05', 'hc05', 'bt']):
+                    is_hc05 = True
+            
+            if is_hc05:
+                try:
+                    logger.info(f"Attempting to connect to {port.device}...")
+                    serial_connection = serial.Serial(port.device, 9600, timeout=1)
+                    logger.info(f"✓ Successfully connected to HC-05 on {port.device}")
+                    
+                    # Start reading data in background
+                    asyncio.create_task(read_serial_data())
+                    return True
+                except Exception as e:
+                    logger.warning(f"Failed to connect to {port.device}: {e}")
+                    continue
+        
+        logger.info("No HC-05 Bluetooth module found. Manual connection required.")
+        return False
+    except Exception as e:
+        logger.error(f"Error during auto-connect: {e}")
+        return False
+
+@app.on_event("startup")
+async def startup_event():
+    """Run on application startup"""
+    logger.info("Piezoelectric Dashboard starting...")
+    await auto_connect_hc05()
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
